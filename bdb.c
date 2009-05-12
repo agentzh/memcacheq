@@ -516,7 +516,7 @@ int print_queue_db_list(char *buf, size_t buf_size){
         queue_db = queue_rec.queue_dbp;
         queue_name[dbkey.size] = '\0';
         if (remains > strlen(queue_name) + 8){
-            res = sprintf(buf, "STAT %s\r\n", queue_name);
+            res = sprintf(buf, "STAT %s %d\r\n", queue_name, queue_rec.queue_size);
             remains -= res;
             buf += res; 
         } else {
