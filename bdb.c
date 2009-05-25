@@ -31,9 +31,9 @@
 #include <db.h>
 
 static int open_exsited_queue_db(DB_TXN *txn, char *queue_name, DB **queue_dbp);
-static int create_queue_db(DB_TXN *txn, char *queue_name, size_t queue_name_size, DB **queue_dbp);
+static int create_queue_db(DB_TXN *txn, char *queue_name, size_t queue_name_size, DB **queue_dbp, u_int32_t max_size);
 static int get_queue_db_handle(DB_TXN *txn, char *queue_name, size_t queue_name_size, queue_rec_t* queue_recp);
-static int update_queue_length(DB_TXN *txn, char *queue_name, size_t queue_name_size, int64_t delta);
+static int update_queue_length(DB_TXN *txn, char *queue_name, size_t queue_name_size, int delta);
 static void close_queue_db_list(void);
 
 static void *bdb_chkpoint_thread __P((void *));
@@ -50,28 +50,28 @@ static pthread_t dld_ptid;
 void bdb_settings_init(void)
 {
     bdb_settings.env_home = DBHOME;
-    bdb_settings.cache_size = 64 * 1024 * 1024; /* default is 64MB */ 
-    bdb_settings.txn_lg_bsize = 32 * 1024; /* default is 32KB */ 
-    
+    bdb_settings.cache_size = 64 * 1024 * 1024; /* default is 64MB */
+    bdb_settings.txn_lg_bsize = 32 * 1024; /* default is 32KB */
+
     /* queue only */
     bdb_settings.re_len = 1024;
     bdb_settings.q_extentsize = 131072;
-    
+
     bdb_settings.page_size = 4096;  /* default is 4K */
     bdb_settings.txn_nosync = 0; /* default DB_TXN_NOSYNC is off */
     bdb_settings.dldetect_val = 100 * 1000; /* default is 100 millisecond */
     bdb_settings.chkpoint_val = 60 * 5;
     bdb_settings.memp_trickle_val = 30;
-    bdb_settings.memp_trickle_percent = 60; 
+    bdb_settings.memp_trickle_percent = 60;
     bdb_settings.db_flags = DB_CREATE | DB_AUTO_COMMIT;
     bdb_settings.env_flags = DB_CREATE
-                          | DB_INIT_LOCK 
-                          | DB_THREAD 
-                          | DB_INIT_MPOOL 
-                          | DB_INIT_LOG 
+                          | DB_INIT_LOCK
+                          | DB_THREAD
+                          | DB_INIT_MPOOL
+                          | DB_INIT_LOG
                           | DB_INIT_TXN
                           | DB_RECOVER;
-                              
+
 }
 
 void bdb_env_init(void){
@@ -88,7 +88,7 @@ void bdb_env_init(void){
     /* env->set_msgfile(env, stderr); */
 	envp->set_errcall(envp, bdb_err_callback);
   	envp->set_msgcall(envp, bdb_msg_callback);
-  	
+
     /* set BerkeleyDB verbose*/
     if (settings.verbose > 1) {
         if ((ret = envp->set_verbose(envp, DB_VERB_FILEOPS_ALL, 1)) != 0) {
@@ -121,13 +121,13 @@ void bdb_env_init(void){
     envp->set_lk_max_locks(envp, 20000);
     envp->set_lk_max_objects(envp, 20000);
     envp->set_tx_max(envp, 20000);
-    
+
     /* at least max active transactions */
   	envp->set_tx_max(envp, 10000);
-  	
+
     /* set transaction log buffer */
     envp->set_lg_bsize(envp, bdb_settings.txn_lg_bsize);
-    
+
     /* if no home dir existed, we create it */
     if (0 != access(bdb_settings.env_home, F_OK)) {
         if (0 != mkdir(bdb_settings.env_home, 0750)) {
@@ -135,7 +135,7 @@ void bdb_env_init(void){
             exit(EXIT_FAILURE);
         }
     }
-    
+
     if ((ret = envp->open(envp, bdb_settings.env_home, bdb_settings.env_flags, 0)) != 0) {
         fprintf(stderr, "db_env_open: %s\n", db_strerror(ret));
         exit(EXIT_FAILURE);
@@ -153,14 +153,14 @@ void bdb_qlist_db_open(void){
     char queue_name[512];
     queue_rec_t queue_rec;
     DB *queue_dbp = NULL;
-    
+
     u_int32_t qlist_db_flags = DB_CREATE;
-    
+
     ret = envp->txn_begin(envp, NULL, &txn, 0);
     if (ret != 0) {
         goto err;
     }
-    
+
     /* for replicas to get a full master copy, then open db */
     while(!db_open) {
         /* close the queue list db */
@@ -173,12 +173,12 @@ void bdb_qlist_db_open(void){
             fprintf(stderr, "db_create: %s\n", db_strerror(ret));
             exit(EXIT_FAILURE);
         }
-        
+
         if ((ret = qlist_dbp->set_priority(qlist_dbp, DB_PRIORITY_VERY_HIGH)) != 0){
             fprintf(stderr, "qlist_dbp->set_priority: %s\n", db_strerror(ret));
             exit(EXIT_FAILURE);
         }
-        
+
         /*
         if ((ret = qlist_dbp->set_pagesize(qlist_dbp, 512)) != 0){
             fprintf(stderr, "qlist_dbp->set_pagesize: %s\n", db_strerror(ret));
@@ -187,7 +187,7 @@ void bdb_qlist_db_open(void){
         */
 
         /* try to open qlist db*/
-        ret = qlist_dbp->open(qlist_dbp, txn, "queue.list", NULL, DB_BTREE, qlist_db_flags, 0664);         
+        ret = qlist_dbp->open(qlist_dbp, txn, "queue.list", NULL, DB_BTREE, qlist_db_flags, 0664);
         switch (ret){
         case 0:
             db_open = 1;
@@ -202,24 +202,24 @@ void bdb_qlist_db_open(void){
             goto err;
         }
     }
-    
+
     /* Get a cursor */
-    ret = qlist_dbp->cursor(qlist_dbp, txn, &cursorp, 0); 
+    ret = qlist_dbp->cursor(qlist_dbp, txn, &cursorp, 0);
     if (ret != 0) {
         goto err;
     }
-    
+
     /* Initialize our DBTs. */
     BDB_CLEANUP_DBT();
     memset(queue_name, 0, 512);
-    
+
     dbkey.data = (void *)queue_name;
     dbkey.ulen = 512;
     dbkey.flags = DB_DBT_USERMEM;
     dbdata.data = (void *)&queue_rec;
     dbdata.ulen = sizeof(queue_rec);
     dbdata.flags = DB_DBT_USERMEM;
-    
+
     /* Iterate over the database, retrieving each record in turn. */
     while ((ret = cursorp->get(cursorp, &dbkey, &dbdata, DB_NEXT)) == 0) {
         memset(&queue_rec, 0, sizeof(queue_rec_t));
@@ -235,18 +235,18 @@ void bdb_qlist_db_open(void){
     if (ret != DB_NOTFOUND) {
         goto err;
     }
-    
+
     if (cursorp != NULL){
         cursorp->close(cursorp);
     }
-    
+
     ret = txn->commit(txn, 0);
     if (ret != 0) {
         goto err;
     }
-    
+
     return;
-        
+
 err:
     if (cursorp != NULL){
         cursorp->close(cursorp);
@@ -264,7 +264,7 @@ static int open_exsited_queue_db(DB_TXN *txn, char *queue_name, DB **queue_dbp){
     u_int32_t db_flags = DB_CREATE;
     DB *temp_dbp = NULL;
     db_open = 0;
-    
+
     /* for replicas to get a full master copy, then open db */
     while(!db_open) {
         if (temp_dbp != NULL){
@@ -276,7 +276,7 @@ static int open_exsited_queue_db(DB_TXN *txn, char *queue_name, DB **queue_dbp){
             fprintf(stderr, "db_create: %s\n", db_strerror(ret));
             goto err;
         }
-        
+
         /* set record length */
         if (bdb_settings.q_extentsize != 0){
             if((ret = temp_dbp->set_q_extentsize(temp_dbp, bdb_settings.q_extentsize)) != 0){
@@ -284,21 +284,21 @@ static int open_exsited_queue_db(DB_TXN *txn, char *queue_name, DB **queue_dbp){
                 goto err;
             }
         }
-        
+
         /* set record length */
         if((ret = temp_dbp->set_re_len(temp_dbp, bdb_settings.re_len)) != 0){
             fprintf(stderr, "temp_dbp[%s]->set_re_len: %s\n", queue_name, db_strerror(ret));
             goto err;
         }
-        
+
         /* set page size */
         if((ret = temp_dbp->set_pagesize(temp_dbp, bdb_settings.page_size)) != 0){
             fprintf(stderr, "temp_dbp[%s]->set_pagesize: %s\n", queue_name, db_strerror(ret));
             goto err;
         }
-    
+
         /* try to open db*/
-        ret = temp_dbp->open(temp_dbp, txn, queue_name, NULL, DB_QUEUE, db_flags, 0664);         
+        ret = temp_dbp->open(temp_dbp, txn, queue_name, NULL, DB_QUEUE, db_flags, 0664);
         switch (ret){
         case 0:
             db_open = 1;
@@ -314,7 +314,7 @@ static int open_exsited_queue_db(DB_TXN *txn, char *queue_name, DB **queue_dbp){
         }
     }
     return 0;
-    
+
 err:
     if (temp_dbp != NULL){
         temp_dbp->close(temp_dbp, 0);
@@ -322,13 +322,13 @@ err:
     return ret;
 }
 
-static int create_queue_db(DB_TXN *txn, char *queue_name, size_t queue_name_size, DB **queue_dbp){
+static int create_queue_db(DB_TXN *txn, char *queue_name, size_t queue_name_size, DB **queue_dbp, u_int32_t max_size) {
     int ret;
     u_int32_t db_flags = DB_CREATE;
     queue_rec_t queue_rec;
     DB *temp_dbp = NULL;
     DBT dbkey,dbdata;
-    
+
     /* DB handle */
     if ((ret = db_create(&temp_dbp, envp, 0)) != 0) {
         goto err;
@@ -346,30 +346,31 @@ static int create_queue_db(DB_TXN *txn, char *queue_name, size_t queue_name_size
     if((ret = temp_dbp->set_pagesize(temp_dbp, bdb_settings.page_size)) != 0){
         goto err;
     }
-    
+
     /* try to open db*/
-    ret = temp_dbp->open(temp_dbp, txn, queue_name, NULL, DB_QUEUE, db_flags, 0664); 
+    ret = temp_dbp->open(temp_dbp, txn, queue_name, NULL, DB_QUEUE, db_flags, 0664);
     if (ret != 0){
         goto err;
     }
 
     queue_rec.queue_dbp = temp_dbp;
-    queue_rec.queue_size = 0;
+    queue_rec.size = 0;
+    queue_rec.max_size = max_size;
 
     BDB_CLEANUP_DBT();
     dbkey.data = (void *)queue_name;
     dbkey.size = queue_name_size;
     dbdata.data = (void *)&queue_rec;
     dbdata.size = sizeof(queue_rec_t);
-    
+
     ret = qlist_dbp->put(qlist_dbp, txn, &dbkey, &dbdata, 0);
     if (ret != 0){
         goto err;
     }
-    
+
     *queue_dbp = temp_dbp;
     return 0;
-    
+
 err:
     if (temp_dbp != NULL){
         temp_dbp->close(temp_dbp, 0);
@@ -383,11 +384,11 @@ int delete_queue_db(char *queue_name, size_t queue_name_size){
     DB_TXN *txn = NULL;
     queue_rec_t queue_rec;
     DB *queue_dbp = NULL;
-    
+
     BDB_CLEANUP_DBT();
     dbkey.data = (void *)queue_name;
     dbkey.size = queue_name_size;
-    
+
     ret = envp->txn_begin(envp, NULL, &txn, 0);
     if (ret != 0) {
         goto err;
@@ -395,27 +396,27 @@ int delete_queue_db(char *queue_name, size_t queue_name_size){
 
     memset(&queue_rec, 0, sizeof(queue_rec_t));
     ret = get_queue_db_handle(txn, queue_name, queue_name_size, &queue_rec);
-    queue_dbp = queue_rec.queue_dbp;
 
-    if (ret != 0 || queue_dbp == NULL){
+    if (ret != 0 ){
         goto err;
     }
-    
+
+    queue_dbp = queue_rec.queue_dbp;
     ret = queue_dbp->close(queue_dbp, 0);
     if (ret != 0 ){
         goto err;
     }
-    
+
     ret = envp->dbremove(envp, txn, queue_name, NULL, 0);
     if (ret != 0){
         goto err;
     }
-    
+
     ret = qlist_dbp->del(qlist_dbp, txn, &dbkey, 0);
     if (ret != 0){
         goto err;
     }
-    
+
     ret = txn->commit(txn, 0);
     if (ret != 0) {
         goto err;
@@ -436,7 +437,7 @@ static int get_queue_db_handle(DB_TXN *txn, char *queue_name, size_t queue_name_
     DBT dbkey, dbdata;
     int ret;
     DB *temp_dbp = NULL;
-    
+
     memset(queue_recp, 0, sizeof(queue_rec_t));
 
     BDB_CLEANUP_DBT();
@@ -445,19 +446,13 @@ static int get_queue_db_handle(DB_TXN *txn, char *queue_name, size_t queue_name_
     dbdata.data = (void *)queue_recp;
     dbdata.ulen = sizeof(queue_rec_t);
     dbdata.flags = DB_DBT_USERMEM;
-    
+
     ret = qlist_dbp->get(qlist_dbp, txn, &dbkey, &dbdata, 0);
-    if (ret == 0){
-    } else if (ret == DB_NOTFOUND){
-        queue_recp->queue_dbp = NULL;
-    } else {
-        return ret;
-    }
-    
-    return 0;
+
+    return ret;
 }
 
-static int update_queue_length(DB_TXN *txn, char *queue_name, size_t queue_name_size, int64_t delta)
+static int update_queue_length(DB_TXN *txn, char *queue_name, size_t queue_name_size, int delta)
 {
     DBT dbkey, dbdata;
     int ret;
@@ -470,10 +465,10 @@ static int update_queue_length(DB_TXN *txn, char *queue_name, size_t queue_name_
     dbdata.ulen = sizeof(queue_rec_t);
     dbdata.flags = DB_DBT_USERMEM;
 
-    
+
     ret = qlist_dbp->get(qlist_dbp, txn, &dbkey, &dbdata, 0);
     if (ret == 0){
-        queue_rec.queue_size += delta;
+        queue_rec.size += delta;
         ret = qlist_dbp->put(qlist_dbp, txn, &dbkey, &dbdata, 0);
     }
 
@@ -490,7 +485,7 @@ int print_queue_db_list(char *buf, size_t buf_size){
     queue_rec_t queue_rec;
     DB *queue_db = NULL;
     int remains = buf_size - 5;
-    
+
     memset(queue_name, 0, 512);
     BDB_CLEANUP_DBT();
     dbkey.data = (void *)queue_name;
@@ -504,21 +499,21 @@ int print_queue_db_list(char *buf, size_t buf_size){
     if (ret != 0) {
         goto err;
     }
-    
+
     /* Get a cursor */
-    ret = qlist_dbp->cursor(qlist_dbp, txn, &cursorp, 0); 
+    ret = qlist_dbp->cursor(qlist_dbp, txn, &cursorp, 0);
     if (ret != 0){
         goto err;
     }
-    
+
     /* Iterate over the database, retrieving each record in turn. */
     while ((ret = cursorp->get(cursorp, &dbkey, &dbdata, DB_NEXT)) == 0) {
         queue_db = queue_rec.queue_dbp;
         queue_name[dbkey.size] = '\0';
         if (remains > strlen(queue_name) + 8){
-            res = sprintf(buf, "STAT %s %d\r\n", queue_name, queue_rec.queue_size);
+            res = sprintf(buf, "STAT %s %d %d\r\n", queue_name, queue_rec.size, queue_rec.max_size);
             remains -= res;
-            buf += res; 
+            buf += res;
         } else {
             break;
         }
@@ -526,7 +521,7 @@ int print_queue_db_list(char *buf, size_t buf_size){
     if (!(ret == DB_NOTFOUND || ret == 0)) {
         goto err;
     }
-    
+
     if (cursorp != NULL){
         cursorp->close(cursorp);
     }
@@ -575,7 +570,7 @@ static void close_queue_db_list(void){
     }
 
     /* Get a cursor */
-    ret = qlist_dbp->cursor(qlist_dbp, txn, &cursorp, 0); 
+    ret = qlist_dbp->cursor(qlist_dbp, txn, &cursorp, 0);
     if (ret != 0){
         goto err;
     }
@@ -624,7 +619,7 @@ item *bdb_get(char *key, size_t nkey){
     DB *queue_dbp = NULL;
     db_recno_t recno;
     int ret;
-    
+
     /* first, alloc a fixed size */
     it = item_alloc2();
     if (it == 0) {
@@ -638,25 +633,25 @@ item *bdb_get(char *key, size_t nkey){
     dbdata.ulen = bdb_settings.re_len;
     dbdata.data = it;
     dbdata.flags = DB_DBT_USERMEM;
-    
+
     ret = envp->txn_begin(envp, NULL, &txn, 0);
     if (ret != 0) {
         goto err;
     }
-    
+
     memset(&queue_rec, 0, sizeof(queue_rec_t));
     ret = get_queue_db_handle(txn, key, nkey, &queue_rec);
-    queue_dbp = queue_rec.queue_dbp;
 
-    if (ret != 0 || queue_dbp == NULL){
+    if (ret != 0) {
         goto err;
     }
-    
+
+    queue_dbp = queue_rec.queue_dbp;
     ret = queue_dbp->get(queue_dbp, txn, &dbkey, &dbdata, DB_CONSUME);
     if (ret != 0){
         goto err;
     }
-    if (settings.max_queue_size) {
+    if (settings.enable_size_limit) {
         UPDATE_QUEUE_LENGTH_LOCK();
         ret = update_queue_length(txn, key, nkey, -1);
         UPDATE_QUEUE_LENGTH_UNLOCK();
@@ -685,6 +680,82 @@ err:
 /* 0 for Success
    -1 for SERVER_ERROR
 */
+int bdb_add(char *key, size_t nkey, item *it){
+    int ret;
+    DBT dbkey, dbdata;
+    DB_TXN *txn = NULL;
+    queue_rec_t queue_rec;
+    DB *queue_dbp = NULL;
+    db_recno_t recno;
+    u_int32_t max_size = -1;
+
+
+    BDB_CLEANUP_DBT();
+    dbkey.data = &recno;
+    dbkey.ulen = sizeof(recno);
+    dbkey.flags = DB_DBT_USERMEM;
+    dbdata.data = it;
+    dbdata.size = ITEM_ntotal(it);
+
+    char* max_size_str = ITEM_data(it);
+
+    max_size = atoi(max_size_str);
+    if (max_size < 1) {
+        if (settings.verbose > 1) {
+            fprintf(stderr, "bdb_add: max_size: %d is not valid!\n", max_size);
+        }
+        ret = -1;
+        goto err;
+    }
+
+    ret = envp->txn_begin(envp, NULL, &txn, 0);
+    if (ret != 0) {
+        if (settings.verbose > 1) {
+            fprintf(stderr, "bdb_add: %s\n", db_strerror(ret));
+        }
+        ret = -1;
+        goto err;
+    }
+
+    memset(&queue_rec, 0, sizeof(queue_rec_t));
+    ret = get_queue_db_handle(txn, key, nkey, &queue_rec);
+    if (ret == 0) {
+        ret = -1;
+        goto err;
+    } else if (ret == DB_NOTFOUND) {
+        ret = create_queue_db(txn, key, nkey, &queue_dbp, max_size);
+        if (ret != 0) {
+            if (settings.verbose > 1) {
+                fprintf(stderr, "bdb_add: %s\n", db_strerror(ret));
+            }
+            ret = -1;
+            goto err;
+        }
+    } else {
+        ret = -1;
+        goto err;
+    }
+
+    ret = txn->commit(txn, 0);
+    if (ret != 0) {
+        if (settings.verbose > 1) {
+            fprintf(stderr, "bdb_add: %s\n", db_strerror(ret));
+        }
+        ret = -1;
+        goto err;
+    }
+
+    return 0;
+err:
+    if (txn != NULL){
+        txn->abort(txn);
+    }
+    return ret;
+}
+
+/* 0 for Success
+   -1 for SERVER_ERROR
+*/
 int bdb_put(char *key, size_t nkey, item *it){
     int ret;
     DBT dbkey, dbdata;
@@ -700,33 +771,27 @@ int bdb_put(char *key, size_t nkey, item *it){
     dbkey.flags = DB_DBT_USERMEM;
     dbdata.data = it;
     dbdata.size = ITEM_ntotal(it);
-    
+
     ret = envp->txn_begin(envp, NULL, &txn, 0);
     if (ret != 0) {
         goto err;
     }
-    
+
     memset(&queue_rec, 0, sizeof(queue_rec_t));
     ret = get_queue_db_handle(txn, key, nkey, &queue_rec);
-    queue_dbp = queue_rec.queue_dbp;
 
     if (ret != 0){
         goto err;
     }
 
-    if (queue_dbp == NULL) {
-        ret = create_queue_db(txn, key, nkey, &queue_dbp);
-        if (ret != 0){
-            goto err;
-        }
-    }
+    queue_dbp = queue_rec.queue_dbp;
 
-    if (settings.max_queue_size && queue_rec.queue_size + 1 > settings.max_queue_size) {
+    if (settings.enable_size_limit && queue_rec.size + 1 > queue_rec.max_size) {
         if (txn != NULL){
             txn->abort(txn);
         }
         if (settings.verbose > 1) {
-            fprintf(stderr, "bdb_put: queue size limited %d\n", settings.max_queue_size);
+            fprintf(stderr, "bdb_put: queue size limited %d\n", queue_rec.max_size);
         }
         return -1;
     }
@@ -735,8 +800,8 @@ int bdb_put(char *key, size_t nkey, item *it){
     if (ret != 0) {
         goto err;
     }
-  
-    if (settings.max_queue_size) {
+
+    if (settings.enable_size_limit) {
         UPDATE_QUEUE_LENGTH_LOCK();
         ret = update_queue_length(txn, key, nkey, 1);
         UPDATE_QUEUE_LENGTH_UNLOCK();
@@ -744,12 +809,12 @@ int bdb_put(char *key, size_t nkey, item *it){
             goto err;
         }
     }
-    
+
     ret = txn->commit(txn, 0);
     if (ret != 0) {
         goto err;
     }
-    
+
     return 0;
 err:
     if (txn != NULL){
@@ -806,7 +871,7 @@ static void *bdb_chkpoint_thread(void *arg)
     int ret;
     dbenv = arg;
     if (settings.verbose > 1) {
-        dbenv->errx(dbenv, "checkpoint thread created: %lu, every %d seconds", 
+        dbenv->errx(dbenv, "checkpoint thread created: %lu, every %d seconds",
                            (u_long)pthread_self(), bdb_settings.chkpoint_val);
     }
     for (;; sleep(bdb_settings.chkpoint_val)) {
@@ -824,7 +889,7 @@ static void *bdb_memp_trickle_thread(void *arg)
     int ret, nwrotep;
     dbenv = arg;
     if (settings.verbose > 1) {
-        dbenv->errx(dbenv, "memp_trickle thread created: %lu, every %d seconds, %d%% pages should be clean.", 
+        dbenv->errx(dbenv, "memp_trickle thread created: %lu, every %d seconds, %d%% pages should be clean.",
                            (u_long)pthread_self(), bdb_settings.memp_trickle_val,
                            bdb_settings.memp_trickle_percent);
     }
@@ -889,7 +954,7 @@ void bdb_chkpoint(void)
 {
     int ret = 0;
     if (envp != NULL){
-        ret = envp->txn_checkpoint(envp, 0, 0, 0); 
+        ret = envp->txn_checkpoint(envp, 0, 0, 0);
         if (0 != ret){
             fprintf(stderr, "envp->txn_checkpoint: %s\n", db_strerror(ret));
         }else{
@@ -901,7 +966,7 @@ void bdb_chkpoint(void)
 /* for atexit cleanup */
 void bdb_db_close(void){
     int ret = 0;
-    
+
     /* close the queue list db */
     if (qlist_dbp != NULL) {
         close_queue_db_list();

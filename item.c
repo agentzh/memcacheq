@@ -121,7 +121,7 @@ item *item_alloc1(char *key, const size_t nkey, const int flags, const int nbyte
     item *it;
     char suffix[40];
     size_t ntotal = item_make_header(nkey + 1, flags, nbytes, suffix, &nsuffix);
-    
+
     if(ntotal > bdb_settings.re_len){
         return NULL;
     }

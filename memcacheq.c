@@ -153,7 +153,7 @@ static void settings_init(void) {
 #else
     settings.num_threads = 1;
 #endif
-    settings.max_queue_size = 0;      /* default no limit of queue size */
+    settings.enable_size_limit = 0;      /* default no limit of queue size */
 }
 
 /*
@@ -647,6 +647,7 @@ static void complete_nread(conn *c) {
     int ret;
     char *key = ITEM_key(it);
     size_t nkey = (size_t)it->nkey;
+    int comm = c->item_comm;
 
     STATS_LOCK();
     stats.set_cmds++;
@@ -655,15 +656,20 @@ static void complete_nread(conn *c) {
     if (strncmp(ITEM_data(it) + it->nbytes - 2, "\r\n", 2) != 0) {
         out_string(c, "CLIENT_ERROR bad data chunk");
     } else {
-      ret = bdb_put(key, nkey, it);
-      if (ret == 0){
-          STATS_LOCK();
-          stats.set_hits++;
-          STATS_UNLOCK();
-          out_string(c, "STORED");
-      } else {
-          out_string(c, "NOT_STORED");
-      }
+        if (comm == NREAD_ADD) {
+            ret = bdb_add(key, nkey, it);
+        } else if (comm == NREAD_SET) {
+            ret = bdb_put(key, nkey, it);
+        }
+        //fprintf(stderr, "===========ret: %d\n", ret);
+        if (ret == 0){
+            STATS_LOCK();
+            stats.set_hits++;
+            STATS_UNLOCK();
+            out_string(c, "STORED");
+        } else {
+            out_string(c, "NOT_STORED");
+        }
     }
 
     item_free(c->item);
@@ -825,7 +831,7 @@ static void process_stat(conn *c, token_t *tokens, const size_t ntokens) {
         out_string(c, temp);
         return;
     }
-    
+
     if (strcmp(subcommand, "queue") == 0) {
         char temp[512];
         int ret;
@@ -928,7 +934,7 @@ static inline void process_get_command(conn *c, token_t *tokens, size_t ntokens)
             }
 
             stats_get_cmds++;
-            
+
             it = bdb_get(key, nkey);
 
             if (it) {
@@ -937,7 +943,7 @@ static inline void process_get_command(conn *c, token_t *tokens, size_t ntokens)
                     if (new_list) {
                         c->isize *= 2;
                         c->ilist = new_list;
-                    } else { 
+                    } else {
                         item_free(it);
                         it = NULL;
                         break;
@@ -1012,7 +1018,7 @@ static inline void process_get_command(conn *c, token_t *tokens, size_t ntokens)
     return;
 }
 
-static void process_update_command(conn *c, token_t *tokens, const size_t ntokens) {
+static void process_update_command(conn *c, token_t *tokens, const size_t ntokens, int comm) {
     char *key;
     size_t nkey;
     int flags;
@@ -1052,6 +1058,7 @@ static void process_update_command(conn *c, token_t *tokens, const size_t ntoken
     c->item = it;
     c->ritem = ITEM_data(it);
     c->rlbytes = it->nbytes;
+    c->item_comm = comm;
     conn_set_state(c, conn_nread);
 }
 
@@ -1111,7 +1118,7 @@ static void process_bdb_command(conn *c, token_t *tokens, const size_t ntokens) 
             out_string(c, "OK");
         }
         return;
-    
+
     }else if (strcmp(tokens[COMMAND_TOKEN].value, "db_checkpoint") == 0){
         if(0 != (ret = envp->txn_checkpoint(envp, 0, 0, 0))){
             if (settings.verbose > 1) {
@@ -1160,12 +1167,12 @@ static void process_command(conn *c, char *command) {
 
         process_get_command(c, tokens, ntokens);
 
-    } else if ((ntokens == 6 ) && (strcmp(tokens[COMMAND_TOKEN].value, "set") == 0) ) {
-
-        process_update_command(c, tokens, ntokens);
-    
+    } else if ((ntokens == 6 ) &&
+            (((strcmp(tokens[COMMAND_TOKEN].value, "add") == 0) && (comm = NREAD_ADD)) ||
+             ((strcmp(tokens[COMMAND_TOKEN].value, "set") == 0) && (comm = NREAD_SET)) )) {
+        process_update_command(c, tokens, ntokens, comm);
     } else if (ntokens >= 3 && ntokens <= 4 && (strcmp(tokens[COMMAND_TOKEN].value, "delete") == 0)) {
-    
+
         process_delete_command(c, tokens, ntokens);
 
     } else if (ntokens >= 2 && (strcmp(tokens[COMMAND_TOKEN].value, "stats") == 0)) {
@@ -1184,7 +1191,7 @@ static void process_command(conn *c, char *command) {
 
         process_verbosity_command(c, tokens, ntokens);
 
-    } else if (ntokens == 2 && 
+    } else if (ntokens == 2 &&
               ((strcmp(tokens[COMMAND_TOKEN].value, "db_archive") == 0 ) ||
                (strcmp(tokens[COMMAND_TOKEN].value, "db_checkpoint") == 0 ))) {
 
@@ -1922,7 +1929,7 @@ static void usage(void) {
            "-r            maximize core file limit\n"
            "-u <username> assume identity of <username> (only when run as root)\n"
            "-c <num>      max simultaneous connections, default is 1024\n"
-           "-S <num>      max limit of queue size, default is no limit\n"
+           "-S            enabled limit of queue size\n"
            "-v            verbose (print errors/warnings while in event loop)\n"
            "-vv           very verbose (also print client commands/reponses)\n"
            "-h            print this help and exit\n"
@@ -1943,7 +1950,7 @@ static void usage(void) {
     /* queue only */
     printf("-E <num>      how many pages in a single db file, default is 131072, 0 for disable\n");
     printf("-B <num>      specify the message body length in bytes, default is 1024\n");
-    
+
     printf("-D <num>      do deadlock detecting every <num> millisecond, 0 for disable, default is 100ms\n");
     printf("-N            enable DB_TXN_NOSYNC to gain big performance improved, default is off\n");
 
@@ -2106,7 +2113,7 @@ static void sig_handler(const int sig)
     fprintf(stderr, "Signal(%d) received, try to exit daemon gracefully..\n", sig);
 
     /* exit event loop first */
-    fprintf(stderr, "exit event base...");    
+    fprintf(stderr, "exit event base...");
     ret = event_base_loopexit(main_base, 0);
     if (ret == 0)
       fprintf(stderr, "done.\n");
@@ -2155,7 +2162,7 @@ int main (int argc, char **argv) {
     setbuf(stderr, NULL);
 
     /* process arguments */
-    while ((c = getopt(argc, argv, "a:U:p:s:c:S:hivl:dru:P:t:f:H:m:A:L:C:T:e:D:E:B:NMSR:O:")) != -1) {
+    while ((c = getopt(argc, argv, "a:U:p:s:c:Shivl:dru:P:t:f:H:m:A:L:C:T:e:D:E:B:NMSR:O:")) != -1) {
         switch (c) {
         case 'a':
             /* access for unix domain socket, as octal mask (like chmod)*/
@@ -2175,7 +2182,7 @@ int main (int argc, char **argv) {
             settings.maxconns = atoi(optarg);
             break;
         case 'S':
-            settings.max_queue_size = atoi(optarg);
+            settings.enable_size_limit = 1;
             break;
         case 'h':
             usage();
@@ -2231,7 +2238,7 @@ int main (int argc, char **argv) {
             break;
         case 'e':
             bdb_settings.memp_trickle_percent = atoi(optarg);
-            if (bdb_settings.memp_trickle_percent < 0 || 
+            if (bdb_settings.memp_trickle_percent < 0 ||
                 bdb_settings.memp_trickle_percent > 100){
                 fprintf(stderr, "memp_trickle_percent should be 0 ~ 100.\n");
                 exit(EXIT_FAILURE);
@@ -2354,7 +2361,7 @@ int main (int argc, char **argv) {
        a file descriptor handling bug somewhere in libevent */
     if (daemonize)
         save_pid(getpid(), pid_file);
-    
+
     /* create unix mode sockets after dropping privileges */
     if (settings.socketpath != NULL) {
         if (server_socket_unix(settings.socketpath,settings.access)) {
@@ -2385,7 +2392,7 @@ int main (int argc, char **argv) {
             exit(EXIT_FAILURE);
         }
     }
-    
+
     /* here we init bdb env and open db */
     bdb_env_init();
     bdb_qlist_db_open();
@@ -2394,16 +2401,16 @@ int main (int argc, char **argv) {
     start_chkpoint_thread();
     start_memp_trickle_thread();
     start_dl_detect_thread();
-        
+
     /* enter the event loop */
     event_base_loop(main_base, 0);
-    
+
     /* cleanup bdb staff */
     fprintf(stderr, "try to clean up bdb resource...\n");
     bdb_chkpoint();
     bdb_db_close();
     bdb_env_close();
-    
+
     /* remove the PID file if we're a daemon */
     if (daemonize)
         remove_pidfile(pid_file);

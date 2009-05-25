@@ -56,6 +56,9 @@
 
 #define DBHOME "/data1/memcacheq"
 
+#define NREAD_ADD   1
+#define NREAD_SET   2
+
 /* Get a consistent bool type */
 #if HAVE_STDBOOL_H
 # include <stdbool.h>
@@ -98,7 +101,7 @@ struct settings {
     char *socketpath;   /* path to unix socket if using local socket */
     int access;  /* access mask (a la chmod) for unix domain socket */
     int num_threads;        /* number of libevent threads to run */
-    int64_t max_queue_size; /* max size limit of queue */
+    int enable_size_limit; /* enable queue size limit */
 };
 
 extern struct stats stats;
@@ -130,7 +133,8 @@ struct bdb_settings {
 /* added by xunxin*/
 typedef struct {
     DB* queue_dbp;
-    int64_t queue_size;
+    u_int32_t max_size;
+    u_int32_t size;
 } queue_rec_t;
 
 
@@ -245,6 +249,7 @@ void bdb_qlist_db_open(void);
 int delete_queue_db(char *queue_name, size_t queue_name_size);
 int print_queue_db_list(char *buf, size_t buf_size);
 item *bdb_get(char *key, size_t nkey);
+int bdb_add(char *key, size_t nkey, item *it);
 int bdb_put(char *key, size_t nkey, item *it);
 
 void start_chkpoint_thread(void);
