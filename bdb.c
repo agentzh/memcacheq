@@ -651,7 +651,7 @@ item *bdb_get(char *key, size_t nkey){
     if (ret != 0){
         goto err;
     }
-    if (settings.enable_size_limit) {
+    if (queue_rec.max_size) {
         UPDATE_QUEUE_LENGTH_LOCK();
         ret = update_queue_length(txn, key, nkey, -1);
         UPDATE_QUEUE_LENGTH_UNLOCK();
@@ -700,7 +700,8 @@ int bdb_add(char *key, size_t nkey, item *it){
     char* max_size_str = ITEM_data(it);
 
     max_size = atoi(max_size_str);
-    if (max_size < 1) {
+    if (strlen(max_size_str) < 1 ||
+        *max_size_str < '0' || *max_size_str > '9' || max_size < 0) {
         if (settings.verbose > 1) {
             fprintf(stderr, "bdb_add: max_size: %d is not valid!\n", max_size);
         }
@@ -786,7 +787,7 @@ int bdb_put(char *key, size_t nkey, item *it){
 
     queue_dbp = queue_rec.queue_dbp;
 
-    if (settings.enable_size_limit && queue_rec.size + 1 > queue_rec.max_size) {
+    if (queue_rec.max_size && (queue_rec.size + 1 > queue_rec.max_size)) {
         if (txn != NULL){
             txn->abort(txn);
         }
@@ -801,7 +802,7 @@ int bdb_put(char *key, size_t nkey, item *it){
         goto err;
     }
 
-    if (settings.enable_size_limit) {
+    if (queue_rec.max_size) {
         UPDATE_QUEUE_LENGTH_LOCK();
         ret = update_queue_length(txn, key, nkey, 1);
         UPDATE_QUEUE_LENGTH_UNLOCK();

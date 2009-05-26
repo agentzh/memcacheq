@@ -153,7 +153,6 @@ static void settings_init(void) {
 #else
     settings.num_threads = 1;
 #endif
-    settings.enable_size_limit = 0;      /* default no limit of queue size */
 }
 
 /*
@@ -1929,7 +1928,6 @@ static void usage(void) {
            "-r            maximize core file limit\n"
            "-u <username> assume identity of <username> (only when run as root)\n"
            "-c <num>      max simultaneous connections, default is 1024\n"
-           "-S            enabled limit of queue size\n"
            "-v            verbose (print errors/warnings while in event loop)\n"
            "-vv           very verbose (also print client commands/reponses)\n"
            "-h            print this help and exit\n"
@@ -2162,7 +2160,7 @@ int main (int argc, char **argv) {
     setbuf(stderr, NULL);
 
     /* process arguments */
-    while ((c = getopt(argc, argv, "a:U:p:s:c:Shivl:dru:P:t:f:H:m:A:L:C:T:e:D:E:B:NMSR:O:")) != -1) {
+    while ((c = getopt(argc, argv, "a:U:p:s:c:hivl:dru:P:t:f:H:m:A:L:C:T:e:D:E:B:NMSR:O:")) != -1) {
         switch (c) {
         case 'a':
             /* access for unix domain socket, as octal mask (like chmod)*/
@@ -2180,9 +2178,6 @@ int main (int argc, char **argv) {
             break;
         case 'c':
             settings.maxconns = atoi(optarg);
-            break;
-        case 'S':
-            settings.enable_size_limit = 1;
             break;
         case 'h':
             usage();

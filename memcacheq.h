@@ -101,7 +101,6 @@ struct settings {
     char *socketpath;   /* path to unix socket if using local socket */
     int access;  /* access mask (a la chmod) for unix domain socket */
     int num_threads;        /* number of libevent threads to run */
-    int enable_size_limit; /* enable queue size limit */
 };
 
 extern struct stats stats;

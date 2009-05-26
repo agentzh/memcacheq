@@ -3,35 +3,29 @@
 use strict;
 use warnings;
 
+use FindBin;
 use Memcached::libmemcached qw(/^memcached/);
-
 use Test::More 'no_plan';
 
+#warn $FindBin::Bin;
+
+system("rm -rf $FindBin::Bin/../mydata");
+system("$FindBin::Bin/../memcacheq -d -p 22202 -B 4064 -r -c 1024 -m 64 -A 4096 -H $FindBin::Bin/../mydata -N -v > ./testenv.log 2>&1");
+
 my $memc = memcached_create();
-memcached_server_add($memc, "localhost", 22201);
+memcached_server_add($memc, "localhost", 22202);
 
 my $q = "test" . time;
-#my $q = "test";
 
 my $ret;
 my $err;
 my $max_size = 10;
 
-$ret = memcached_add($memc, $q, "xaf");
-$err = $memc->errstr;
-ok(!(defined $ret), "add a queue no max size");
-is($err, "NOT STORED");
 
-
-$ret = memcached_add($memc, $q, $max_size);
+$ret = memcached_add($memc, $q, 0);
 $err = $memc->errstr;
-ok($ret, "add a queue");
+ok($ret, "add a queue no size limited");
 is($err, "SUCCESS");
-
-$ret = memcached_add($memc, $q, 100);
-$err = $memc->errstr;
-ok(!(defined $ret), "add a queue again");
-is($err, "NOT STORED");
 
 for my $i (1..$max_size) {
     $ret = memcached_set($memc, $q, $i);
@@ -39,51 +33,10 @@ for my $i (1..$max_size) {
 }
 
 $ret = memcached_set($memc, $q, $max_size + 1);
-ok(!$ret, "set a item will exceed the limit of max size");
+ok($ret, "set a item exceed the max size limit when not enabled limit");
 
-for my $i (1..$max_size) {
-    $ret = memcached_get($memc, $q);
-    is($ret, $i, "get item $i");
-}
-$ret = memcached_get($memc, $q);
-ok(!$ret, "get a item will exceed the limit of max size");
-
-my $q2 = "test-q2" . time;
-$max_size = 5;
-
-$ret = memcached_add($memc, $q2, "xaf");
-$err = $memc->errstr;
-ok(!(defined $ret), "add a queue no max size");
-is($err, "NOT STORED");
+$ret = memcached_set($memc, $q, 't' x (4064-30-(length $q)));
+ok($ret, "set a item exceed the max size limit when not enabled limit");
 
 
-$ret = memcached_add($memc, $q2, $max_size);
-$err = $memc->errstr;
-ok($ret, "add a queue");
-is($err, "SUCCESS");
-
-$ret = memcached_add($memc, $q2, 100);
-$err = $memc->errstr;
-ok(!(defined $ret), "add a queue again");
-is($err, "NOT STORED");
-
-for my $i (1..$max_size) {
-    $ret = memcached_set($memc, $q2, $i);
-    ok($ret, "set a item $i");
-}
-
-$ret = memcached_set($memc, $q2, $max_size + 1);
-ok(!$ret, "set a item will exceed the limit of max size");
-
-for my $i (1..$max_size) {
-    $ret = memcached_get($memc, $q2);
-    is($ret, $i, "get item $i");
-}
-$ret = memcached_get($memc, $q2);
-ok(!$ret, "get a item will exceed the limit of max size");
-
-ok(memcached_delete($memc, $q), "delete queue 1");
-ok(memcached_delete($memc, $q2), "delete queue 2");
-ok(!memcached_delete($memc, $q2), "delete queue 2 again");
-
-
+system("pkill memcacheq");
