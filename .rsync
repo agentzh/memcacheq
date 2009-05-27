@@ -1,0 +1,4 @@
+#!/bin/sh
+
+rsync -rcv --exclude='Makefile.old' --exclude='.git' --exclude='*.swp' --exclude='*~' `pwd`/ agentzh@bisheng:/export/crawlspace/agentz/memcacheq-dev/
+
