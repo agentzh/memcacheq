@@ -222,7 +222,7 @@ void bdb_qlist_db_open(void){
 
     /* Iterate over the database, retrieving each record in turn. */
     while ((ret = cursorp->get(cursorp, &dbkey, &dbdata, DB_NEXT)) == 0) {
-        memset(&queue_rec, 0, sizeof(queue_rec_t));
+        //memset(&queue_rec, 0, sizeof(queue_rec_t));
         ret = open_exsited_queue_db(txn, queue_name, &queue_rec.queue_dbp);
         if (ret != 0){
             goto err;
