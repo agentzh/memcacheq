@@ -3,5 +3,5 @@
 rsync -rcv --exclude='Makefile.old' --exclude='.git' --exclude='*.swp' \
     --exclude='*~' --exclude='*.o' --exclude='*.so' --exclude='*.a' \
     --exclude='mydata' \
-    `pwd`/ agentzh@bisheng:/data/agentzh/memcacheq-dev/
+    `pwd`/ agentz@bisheng:/data/agentzh/memcacheq-dev/
 
