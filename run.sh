@@ -8,6 +8,6 @@ rm -rf mydata
 sleep 1
 
 #./memcacheq -S 100 -p 22201 -B 4067 -A 4096 -r -c 1024 -m 64 -H ./mydata -vv
-./memcacheq -S 100 -p 22201 -B 32738 -A 32768 -r -c 1024 -m 64 -H ./mydata -vv
+./memcacheq -p 22201 -B 32738 -A 32768 -r -c 1024 -m 64 -H ./mydata -vv
 #exec ./memcacheq -p 22201 -B 1020 -d -r -c 1024 -m 256 -A 1024 -H ./mydata -N -v > ./testenv.log 2>&1
 
