@@ -666,6 +666,8 @@ static void complete_nread(conn *c) {
             stats.set_hits++;
             STATS_UNLOCK();
             out_string(c, "STORED");
+        } else if (ret == 1) {
+            out_string(c, "NOT_FOUND");
         } else {
             out_string(c, "NOT_STORED");
         }

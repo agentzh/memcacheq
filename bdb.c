@@ -782,7 +782,13 @@ int bdb_put(char *key, size_t nkey, item *it){
     ret = get_queue_db_handle(txn, key, nkey, &queue_rec);
 
     if (ret != 0){
-        goto err;
+        if (txn != NULL){
+            txn->abort(txn);
+        }
+        if (settings.verbose > 1) {
+            fprintf(stderr, "bdb_put: %s\n", db_strerror(ret));
+        }
+        return 1;
     }
 
     queue_dbp = queue_rec.queue_dbp;

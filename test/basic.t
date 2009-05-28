@@ -21,6 +21,10 @@ my $ret;
 my $err;
 my $max_size = 10;
 
+$ret = memcached_set($memc, $q, 'abc');
+$err = $memc->errstr;
+ok(!$ret, 'not add queue yet.');
+is($err, "NOT FOUND");
 
 $ret = memcached_add($memc, $q, 0);
 $err = $memc->errstr;
