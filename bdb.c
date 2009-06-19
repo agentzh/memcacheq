@@ -510,7 +510,7 @@ int print_queue_db_list(char *buf, size_t buf_size){
     while ((ret = cursorp->get(cursorp, &dbkey, &dbdata, DB_NEXT)) == 0) {
         queue_db = queue_rec.queue_dbp;
         queue_name[dbkey.size] = '\0';
-        if (remains > strlen(queue_name) + 8){
+        if (remains > strlen(queue_name) + 30){
             res = sprintf(buf, "STAT %s %d %d\r\n", queue_name, queue_rec.size, queue_rec.max_size);
             remains -= res;
             buf += res;
