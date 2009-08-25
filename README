@@ -1,8 +1,8 @@
-This is a fork of memcacheq from xunxin and agentzh originally for
-Yahoo! China's webpage info extraction cluster based on WebKit. And
-it's opensourced here meant to be useful for others and for the
-original author of memcacheq's potential consideration of merging
-back to the mainstream.
+This is a fork of memcacheq ( http://memcachedb.org/memcacheq/ )
+from xunxin and agentzh originally for Yahoo! China's webpage info
+extraction cluster based on WebKit. And it's opensourced here meant
+to be useful for others and for the original author of memcacheq's
+potential consideration of merging back to the mainstream.
 
 This fork adds the ability to limit and query the length of queues
 and to specify a length limit when creating a queue.
