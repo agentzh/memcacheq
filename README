@@ -1,9 +1,11 @@
 This is a queue-size-ware version of memcacheq
 (http://memcachedb.org/memcacheq/) from xunxin and agentzh
 originally developed for Yahoo! China's webpage information
-extraction cluster based on WebKit. And it's opensourced here meant
-to be useful for others and for the original author of memcacheq's
-potential consideration of merging back to the mainstream.
+extraction cluster based on WebKit.
+
+It's opensourced here meant to be useful for others and for
+the original author of memcacheq's potential consideration of
+merging back to the mainstream.
 
 This fork adds the ability to limit and query the length of queues
 and to specify a length limit when creating a queue.
