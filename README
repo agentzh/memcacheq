@@ -1,5 +1,6 @@
-This is a fork of memcacheq ( http://memcachedb.org/memcacheq/ )
-from xunxin and agentzh originally for Yahoo! China's webpage info
+This is a queue-size-ware version of memcacheq
+(http://memcachedb.org/memcacheq/) from xunxin and agentzh
+originally developed for Yahoo! China's webpage information
 extraction cluster based on WebKit. And it's opensourced here meant
 to be useful for others and for the original author of memcacheq's
 potential consideration of merging back to the mainstream.
