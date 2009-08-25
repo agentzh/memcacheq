@@ -86,7 +86,7 @@ Note that the queue size is stored separately in contrast to real-time
 counting, so it might be kinda out of sync if the daemon exits abnormally
 and the -N option is specified when starting the daemon.
 
-We usually use the command-line utilities as well as the high-level
+We usually use the command-line utilities as well as the high-level Perl 5
 library provided by the Queue::Memcached::Buffered module opensourced here:
 
   http://github.com/agentzh/queue-memcached-buffered
