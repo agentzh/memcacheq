@@ -27,7 +27,7 @@ To start the memcacheq daemon:
 If there's corruption in your memcacheq's underlying BDB database, try
 the following command:
 
-  $ /path/to/your/bdb/bin/db_recover -h /export/bdbdata/vdomkit/
+  $ /path/to/your/bdb/bin/db_recover -h /path/to/your/bdbdata/base
 
 * Client side
 
