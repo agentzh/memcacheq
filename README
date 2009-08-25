@@ -40,6 +40,9 @@ We use pseudo libmemcached C code to demonstrate the client-side usage.
 where "size_limit" is the maximum number of elements in that queue named
 "queue_name".
 
+Note that the number of queues is limited by the underlying BDB queue
+storage.
+
 2. To remove a queue:
 
   memcached_delete(memc, queue_name);
@@ -48,9 +51,15 @@ where "size_limit" is the maximum number of elements in that queue named
 
   memcached_set(memc, queue_name, element_content);
 
+Once the queue has already reached the length limit, it returns
+the standard memcached "NOT STORED" exception code.
+
 4. To read an element from a queue:
 
   element_content = memcached_get(memc, queue_name);
+
+Once the queue is already empty, it returns a standard memcached
+"NOT FOUND" exception code.
 
 5. To monitor the queues' state in a certain memcacheq server
 (here we use a shell command to illustrate):
@@ -72,6 +81,10 @@ typical instance of the output might be:
 where the second column in the listing specify the names of the queues,
 the third column the current size of the queues, and the forth column
 the size limit of the queues.
+
+Note that the queue size is stored separately in contrast to real-time
+counting, so it might be kinda out of sync if the daemon exits abnormally
+and the -N option is specified when starting the daemon.
 
 We usually use the command-line utilities as well as the high-level
 library provided by the Queue::Memcached::Buffered module opensourced here:
