@@ -1,3 +1,85 @@
+This is a fork of memcacheq from xunxin and agentzh originally for
+Yahoo! China's webpage info extraction cluster based on WebKit. And
+it's opensourced here meant to be useful for others and for the
+original author of memcacheq's potential consideration of merging
+back to the mainstream.
+
+This fork adds the ability to limit and query the length of queues
+and to specify a length limit when creating a queue.
+
+Here's the usage of this fork.
+
+* Server side
+
+ $ memcacheq -u my_user -p 5000 -B 4064 -A 4096 -r -c 1024 -m 64 -N \
+        -H /path/to/my/bdbdata/base
+
+where -u indicates the user who runs this deamon, -p specifies a port
+number that this daemon listens to, -B specifies the message body length
+in bytes (but actually you can only store messages of size tens of bytes
+smaller that that), -A specifies the underlying BDB page size, -m
+specifies the in-memory cache size, -N uses BDB's no-sync feature to
+gain more speed at the cost of consistency, and -H specifies the on-disk
+storage location. See memcacheq's command-line usage for more information.
+
+To start the memcacheq daemon:
+
+If there's corruption in your memcacheq's underlying BDB database, try
+the following command:
+
+  $ /path/to/your/bdb/bin/db_recover -h /export/bdbdata/vdomkit/
+
+* Client side
+
+We use pseudo libmemcached C code to demonstrate the client-side usage.
+
+1. To create a queue:
+
+  memcached_add(memc, queue_name, size_limit);
+
+where "size_limit" is the maximum number of elements in that queue named
+"queue_name".
+
+2. To remove a queue:
+
+  memcached_delete(memc, queue_name);
+
+3. To insert an element to a queue:
+
+  memcached_set(memc, queue_name, element_content);
+
+4. To read an element from a queue:
+
+  element_content = memcached_get(memc, queue_name);
+
+5. To monitor the queues' state in a certain memcacheq server
+(here we use a shell command to illustrate):
+
+  $ echo stats queue | nc 10.62.100.35:11211
+
+where the memcacheq daemon listens the 11211 port at 10.62.100.35. A
+typical instance of the output might be:
+
+    STAT bbsdetails 0 2000000
+    STAT bbslists 72 2000000
+    STAT comment 3 1234567
+    STAT done 0 1234567
+    STAT initial 25 1234567
+    STAT pagecat 5006 1234567
+    STAT preprocessed 10 500
+    END
+
+where the second column in the listing specify the names of the queues,
+the third column the current size of the queues, and the forth column
+the size limit of the queues.
+
+We usually use the command-line utilities as well as the high-level
+library provided by the Queue::Memcached::Buffered module opensourced here:
+
+  http://github.com/agentzh/queue-memcached-buffered
+
+Below is the original memcacheq documentation in README:
+
 ===============================================
 MemcacheQ - Simple Queue Service over Memcache
 ===============================================
